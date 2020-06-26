@@ -1,0 +1,22 @@
+{
+  "name": "Visible Infrared Imaging Radiometer Suite Skill",
+  "skillname": "skill-viirs",
+  "authorname": "JarbasSkills",
+  "foldername": "",
+  "url": "https://github.com/JarbasSkills/skill-viirs",
+  "branch": "master",
+  "desktopFile": false,
+  "warning": "",
+  "systemDeps": false,
+  "platforms": [
+    "arm",
+    "arm64",
+    "i386",
+    "x86_64",
+    "ia64"
+  ],
+  "examples": [
+    "show my location from space",
+    "talk about Visible Infrared Imaging Radiometer Suite"
+  ]
+}
