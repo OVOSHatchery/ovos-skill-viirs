@@ -19,8 +19,6 @@ from urllib3 import poolmanager
 import geocoder
 
 
-
-
 class TLSAdapter(adapters.HTTPAdapter):
 
     def init_poolmanager(self, connections, maxsize, block=False):
@@ -48,6 +46,16 @@ class VIIRSSkill(MycroftSkill):
         # HAck around requests bug
         self.session = requests.session()
         self.session.mount('https://', TLSAdapter())
+
+    def initialize(self):
+        # state tracking
+        self.current_zoom = self.settings["zoom"]
+        self.current_date = None
+        self.current_location = self.location_pretty
+        self.geocache = {
+            self.location_pretty: (self.location["coordinate"]["latitude"],
+                                   self.location["coordinate"]["longitude"])
+        }
 
     def validate_date(self, date):
 
@@ -82,13 +90,15 @@ class VIIRSSkill(MycroftSkill):
             date = latest_date
         return date
 
-    @staticmethod
-    def geolocate(address, try_all=True):
+    def geolocate(self, address, try_all=True):
+        if address in self.geocache:
+            return self.geocache[address]
         try:
             # should be installed from default skills
             from astral.geocoder import database, lookup
             # see https://astral.readthedocs.io/en/latest/#cities
             a = lookup(address, database())
+            self.geocache[address] = (a.latitude, a.longitude)
             return a.latitude, a.longitude
         except:
             pass  # use online geocoder
@@ -115,7 +125,7 @@ class VIIRSSkill(MycroftSkill):
             location_data = location_data.json
             lat = location_data.get("lat")
             lon = location_data.get("lng")
-
+            self.geocache[address] = (lat, lon)
             return lat, lon
         raise ValueError
 
@@ -147,7 +157,8 @@ class VIIRSSkill(MycroftSkill):
             f.write(r.content)
         return path
 
-    def update_picture(self, zoom=8, sat=None, date=None, lat=None, lon=None):
+    def update_picture(self, zoom=None, sat=None, date=None, lat=None,
+                       lon=None):
         lat = lat or self.location["coordinate"]["latitude"]
         lon = lon or self.location["coordinate"]["longitude"]
         date = self.validate_date(date)
@@ -163,11 +174,15 @@ class VIIRSSkill(MycroftSkill):
             location = self.gui["location"]
         except:
             location = self.location_pretty
-        self.gui["title"] = "{location} {date}"\
+        self.gui["title"] = "{location} {date}" \
             .format(date=date, location=location)
-        self.gui["caption"] = "Latitude: {lat}  Longitude: {lon}"\
+        self.gui["caption"] = "Latitude: {lat}  Longitude: {lon}" \
             .format(lat=lat, lon=lon)
         self.set_context("VIIRS")
+        # save date for follow up intents
+        self.current_date = datetime.strptime(date, "%Y-%m-%d")
+        self.current_location = location
+        self.current_zoom = zoom
 
     @resting_screen_handler("VIIRS")
     def idle(self, message):
@@ -197,12 +212,7 @@ class VIIRSSkill(MycroftSkill):
         sleep(1)
         self.gui.clear()
 
-    @intent_file_handler('viirs.intent')
-    @intent_file_handler('viirs_time.intent')
-    @intent_file_handler('viirs_location.intent')
-    def handle_viirs(self, message):
-        date = extract_datetime(message.data["utterance"], lang=self.lang)
-        location = message.data.get("location")
+    def _display_and_speak(self, date, location):
         lat, lon = None, None
         self.gui["location"] = self.location_pretty
         if location:
@@ -212,37 +222,64 @@ class VIIRSSkill(MycroftSkill):
                 self.speak_dialog("location.error", {"location": location})
                 return
             self.gui["location"] = location
+        self.update_picture(date=date, lat=lat, lon=lon)
         if date:
             # TODO validate date and speak error message if in future
             # will still display most recent, but want to signal user
-            self.update_picture(date=date[0], lat=lat, lon=lon)
-        else:
-            self.update_picture(lat=lat, lon=lon)
-        date = datetime.strptime(self.gui["date_str"], "%Y-%m-%d")
+            if isinstance(date, str):
+                date = datetime.strptime(date, "%Y-%m-%d")
+            delta = date - self.current_date
+            if delta:
+                self.speak_dialog("bad.date")
+
         self.gui.show_image(self.gui['imgLink'],
                             title=self.gui['title'],
                             caption=self.gui["caption"],
                             fill='PreserveAspectFit')
-        date = nice_date(date, lang=self.lang)
+        date = nice_date(self.current_date, lang=self.lang)
         if location:
-
             self.speak_dialog("location",
                               {"date": date, "location": location}, wait=True)
         else:
             self.speak_dialog("house", {"date": date}, wait=True)
-        sleep(1)
-        self.gui.clear()
+
+    @intent_file_handler('viirs.intent')
+    @intent_file_handler('viirs_time.intent')
+    @intent_file_handler('viirs_location.intent')
+    def handle_viirs(self, message):
+        date = extract_datetime(message.data["utterance"], lang=self.lang)
+        if date:
+            date = date[0]
+        location = message.data.get("location")
+        self._display_and_speak(date, location)
+
+    @intent_handler(IntentBuilder("WhyCloudsIntent")
+                    .require("why").require("clouds").require("VIIRS"))
+    def handle_clouds(self, message):
+        self.speak_dialog("clouds", wait=True)
+
+    @intent_handler(IntentBuilder("PrevSatPictureIntent")
+                    .require("previous").require("picture").require("VIIRS"))
+    def handle_prev(self, message):
+        date = self.current_date - timedelta(days=1)
+        location = self.current_location
+        self._display_and_speak(date, location)
+
+    @intent_handler(IntentBuilder("NextSatPictureIntent")
+                    .require("next").require("picture").require("VIIRS"))
+    def handle_next(self, message):
+        date = self.current_date + timedelta(days=1)
+        location = self.current_location
+        self._display_and_speak(date, location)
+
+    def handle_set_zoom(self, message):
+        raise NotImplementedError
 
     def handle_zoom_out(self, message):
         raise NotImplementedError
 
     def handle_zoom_in(self, message):
         raise NotImplementedError
-
-    @intent_handler(IntentBuilder("WhyCloudsIntent")
-                    .require("why").require("clouds").require("VIIRS"))
-    def handle_clouds(self, message):
-        self.speak_dialog("clouds", wait=True)
 
 
 def create_skill():

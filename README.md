@@ -14,6 +14,8 @@ Can be used as idle screen for the mark2
 ## Examples
 * "show my location from space"
 * "show me london from space"
+* "next picture"
+* "previous picture"
 * "show my house from space last month"
 * "why so many clouds"
 * "talk about Visible Infrared Imaging Radiometer Suite"
