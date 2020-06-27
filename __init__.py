@@ -263,6 +263,12 @@ class VIIRSSkill(MycroftSkill):
     def handle_clouds(self, message):
         self.speak_dialog("clouds", wait=True)
 
+    @intent_handler(IntentBuilder("WhyHolesIntent")
+                    .require("why").require("gaps")
+                    .require("equator").require("VIIRS"))
+    def handle_equator(self, message):
+        self.speak_dialog("black_strips", wait=True)
+
     @intent_handler(IntentBuilder("PrevSatPictureIntent")
                     .require("previous").require("picture").require("VIIRS"))
     def handle_prev(self, message):

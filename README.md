@@ -22,6 +22,7 @@ Can be used as idle screen for the mark2
 * "zoom out"
 * "set zoom to maximum"
 * "why so many clouds"
+* "explain the holes in the equator"
 * "talk about Visible Infrared Imaging Radiometer Suite"
 
 ## Credits
