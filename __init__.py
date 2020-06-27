@@ -163,7 +163,7 @@ class VIIRSSkill(MycroftSkill):
             location = self.gui["location"]
         except:
             location = self.location_pretty
-        self.gui["title"] = "{location} - {date}"\
+        self.gui["title"] = "{location} {date}"\
             .format(date=date, location=location)
         self.gui["caption"] = "Latitude: {lat}  Longitude: {lon}"\
             .format(lat=lat, lon=lon)
@@ -235,7 +235,7 @@ class VIIRSSkill(MycroftSkill):
 
     def handle_zoom_out(self, message):
         raise NotImplementedError
-    
+
     def handle_zoom_in(self, message):
         raise NotImplementedError
 
