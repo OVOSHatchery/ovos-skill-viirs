@@ -8,10 +8,14 @@ Near real time Satellite imagery from NASA's [Visible Infrared Imaging Radiomete
 Can be used as idle screen for the mark2
 
 ![](gui.png)
+![](gui1.png)
 ![](gui2.png)
 
 ## Examples
 * "show my location from space"
+* "show me london from space"
+* "show my house from space last month"
+* "why so many clouds"
 * "talk about Visible Infrared Imaging Radiometer Suite"
 
 ## Credits
