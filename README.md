@@ -10,6 +10,7 @@ Can be used as idle screen for the mark2
 ![](gui.png)
 ![](gui1.png)
 ![](gui2.png)
+![](gui3.png)
 
 ## Examples
 * "show my location from space"
@@ -17,6 +18,9 @@ Can be used as idle screen for the mark2
 * "next picture"
 * "previous picture"
 * "show my house from space last month"
+* "increase zoom"
+* "zoom out"
+* "set zoom to maximum"
 * "why so many clouds"
 * "talk about Visible Infrared Imaging Radiometer Suite"
 

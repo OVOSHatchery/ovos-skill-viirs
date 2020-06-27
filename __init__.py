@@ -6,7 +6,7 @@ import tempfile
 import requests
 from datetime import timedelta, datetime
 from lingua_franca.format import nice_date
-from lingua_franca.parse import extract_datetime
+from lingua_franca.parse import extract_datetime, extract_number
 import random
 from adapt.intent import IntentBuilder
 
@@ -49,7 +49,6 @@ class VIIRSSkill(MycroftSkill):
 
     def initialize(self):
         # state tracking
-        self.current_zoom = self.settings["zoom"]
         self.current_date = None
         self.current_location = self.location_pretty
         self.geocache = {
@@ -163,7 +162,7 @@ class VIIRSSkill(MycroftSkill):
         lon = lon or self.location["coordinate"]["longitude"]
         date = self.validate_date(date)
         sat = sat or random.choice(["Terra", "Aqua"])
-
+        zoom = zoom or self.settings["zoom"]
         self.gui['imgLink'] = self.settings['imgLink'] = \
             self.get_picture(lat, lon, date, zoom, sat)
         self.gui['date_str'] = date
@@ -174,15 +173,19 @@ class VIIRSSkill(MycroftSkill):
             location = self.gui["location"]
         except:
             location = self.location_pretty
-        self.gui["title"] = "{location} {date}" \
-            .format(date=date, location=location)
-        self.gui["caption"] = "Latitude: {lat}  Longitude: {lon}" \
-            .format(lat=lat, lon=lon)
+        if zoom == 0:
+            self.gui["title"] = date
+            self.gui["caption"] = "planet earth"
+        else:
+            self.gui["title"] = "{location} {date}" \
+                .format(date=date, location=location)
+            self.gui["caption"] = "Latitude: {lat}  Longitude: {lon}" \
+                .format(lat=lat, lon=lon)
         self.set_context("VIIRS")
         # save date for follow up intents
         self.current_date = datetime.strptime(date, "%Y-%m-%d")
         self.current_location = location
-        self.current_zoom = zoom
+        self.settings["zoom"] = zoom
 
     @resting_screen_handler("VIIRS")
     def idle(self, message):
@@ -212,7 +215,7 @@ class VIIRSSkill(MycroftSkill):
         sleep(1)
         self.gui.clear()
 
-    def _display_and_speak(self, date, location):
+    def _display(self, date, location, silent=False):
         lat, lon = None, None
         self.gui["location"] = self.location_pretty
         if location:
@@ -237,6 +240,8 @@ class VIIRSSkill(MycroftSkill):
                             caption=self.gui["caption"],
                             fill='PreserveAspectFit')
         date = nice_date(self.current_date, lang=self.lang)
+        if silent:
+            return
         if location:
             self.speak_dialog("location",
                               {"date": date, "location": location}, wait=True)
@@ -251,7 +256,7 @@ class VIIRSSkill(MycroftSkill):
         if date:
             date = date[0]
         location = message.data.get("location")
-        self._display_and_speak(date, location)
+        self._display(date, location)
 
     @intent_handler(IntentBuilder("WhyCloudsIntent")
                     .require("why").require("clouds").require("VIIRS"))
@@ -263,23 +268,67 @@ class VIIRSSkill(MycroftSkill):
     def handle_prev(self, message):
         date = self.current_date - timedelta(days=1)
         location = self.current_location
-        self._display_and_speak(date, location)
+        self._display(date, location)
 
     @intent_handler(IntentBuilder("NextSatPictureIntent")
                     .require("next").require("picture").require("VIIRS"))
     def handle_next(self, message):
         date = self.current_date + timedelta(days=1)
         location = self.current_location
-        self._display_and_speak(date, location)
+        self._display(date, location)
 
+    def change_zoom(self, n):
+        self.settings["zoom"] = int(n)
+        if self.settings["zoom"] < 0:
+            self.settings["zoom"] = 0
+        if self.settings["zoom"] > 8:
+            self.settings["zoom"] = 8
+        self._display(self.current_date, self.current_location, silent=True)
+        self.speak_dialog("zoom", {"number": self.settings["zoom"]})
+
+    @intent_handler(IntentBuilder("SetZoomIntent")
+                    .require("set_zoom").require("VIIRS")
+                    .optionally("min").optionally("max"))
     def handle_set_zoom(self, message):
-        raise NotImplementedError
+        if self.voc_match(message.data["utterance"], "max"):
+            n = 8
+            if self.settings["zoom"] == 8:
+                self.speak_dialog("max.zoom")
+                return
+        elif self.voc_match(message.data["utterance"], "min"):
+            n = 0
+            if self.settings["zoom"] == 0:
+                self.speak_dialog("min.zoom")
+                return
+        else:
+            n = extract_number(message.data["utterance"], ordinals=True)
+            if n is False or n < 0 or n > 8:
+                self.speak_dialog("bad.zoom")
+                return
+        self.change_zoom(n)
 
+    @intent_handler(IntentBuilder("DecreaseZoomIntent")
+                    .require("less_zoom").require("VIIRS"))
     def handle_zoom_out(self, message):
-        raise NotImplementedError
 
+        n = extract_number(message.data["utterance"], ordinals=True)
+        if n is False:
+            n = self.settings["zoom"] - 1
+        if n < 0:
+            self.speak_dialog("min.zoom")
+            return
+        self.change_zoom(n)
+
+    @intent_handler(IntentBuilder("IncreaseZoomIntent")
+                    .require("more_zoom").require("VIIRS"))
     def handle_zoom_in(self, message):
-        raise NotImplementedError
+        n = extract_number(message.data["utterance"], ordinals=True)
+        if n is False:
+            n = self.settings["zoom"] + 1
+        if n > 8:
+            self.speak_dialog("max.zoom")
+            return
+        self.change_zoom(n)
 
 
 def create_skill():
