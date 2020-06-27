@@ -181,11 +181,13 @@ class VIIRSSkill(MycroftSkill):
                 .format(date=date, location=location)
             self.gui["caption"] = "Latitude: {lat}  Longitude: {lon}" \
                 .format(lat=lat, lon=lon)
-        self.set_context("VIIRS")
-        # save date for follow up intents
+        # save context for follow up intents
         self.current_date = datetime.strptime(date, "%Y-%m-%d")
         self.current_location = location
         self.settings["zoom"] = zoom
+        self.set_context("VIIRS")
+        if self.settings["zoom"] < 2:
+            self.set_context("equator")  # dont require this word
 
     @resting_screen_handler("VIIRS")
     def idle(self, message):
@@ -289,8 +291,6 @@ class VIIRSSkill(MycroftSkill):
             self.settings["zoom"] = 0
         if self.settings["zoom"] > 8:
             self.settings["zoom"] = 8
-        if self.settings["zoom"] < 2:
-            self.set_context("equator")  # dont require this word
         self._display(self.current_date, self.current_location, silent=True)
         self.speak_dialog("zoom", {"number": self.settings["zoom"]})
 
