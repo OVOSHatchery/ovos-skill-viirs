@@ -289,6 +289,8 @@ class VIIRSSkill(MycroftSkill):
             self.settings["zoom"] = 0
         if self.settings["zoom"] > 8:
             self.settings["zoom"] = 8
+        if self.settings["zoom"] < 2:
+            self.set_context("equator")  # dont require this word
         self._display(self.current_date, self.current_location, silent=True)
         self.speak_dialog("zoom", {"number": self.settings["zoom"]})
 
