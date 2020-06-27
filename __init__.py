@@ -213,6 +213,8 @@ class VIIRSSkill(MycroftSkill):
                 return
             self.gui["location"] = location
         if date:
+            # TODO validate date and speak error message if in future
+            # will still display most recent, but want to signal user
             self.update_picture(date=date[0], lat=lat, lon=lon)
         else:
             self.update_picture(lat=lat, lon=lon)
@@ -230,6 +232,12 @@ class VIIRSSkill(MycroftSkill):
             self.speak_dialog("house", {"date": date}, wait=True)
         sleep(1)
         self.gui.clear()
+
+    def handle_zoom_out(self, message):
+        raise NotImplementedError
+    
+    def handle_zoom_in(self, message):
+        raise NotImplementedError
 
     @intent_handler(IntentBuilder("WhyCloudsIntent")
                     .require("why").require("clouds").require("VIIRS"))
