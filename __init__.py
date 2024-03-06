@@ -1,22 +1,23 @@
-from mycroft import MycroftSkill, intent_file_handler, intent_handler
-from mycroft.skills.core import resting_screen_handler
-from time import sleep
-from os.path import join, dirname
+import random
+import ssl
 import tempfile
-import requests
 from datetime import timedelta, datetime
+from os.path import join, dirname
+from time import sleep
+
+import geocoder
+import requests
 from lingua_franca.format import nice_date
 from lingua_franca.parse import extract_datetime, extract_number
-import random
-from adapt.intent import IntentBuilder
-
+from ovos_workshop.decorators import intent_handler
+from ovos_workshop.decorators import resting_screen_handler
+from ovos_workshop.intents import IntentBuilder
+from ovos_workshop.skills import OVOSSkill
 # HACK
 # workaround raise SSLError(e, request=request) requests.exceptions.SSLError: HTTPSConnectionPool(host='gibs.earthdata.nasa.gov', port=443): Max retries exceeded with url: /wmts/epsg4326/best/wmts.cgi?SERVICE=WMTS&request=GetCapabilities (Caused by SSLError(SSLError(1, '[SSL: WRONG_SIGNATURE_TYPE] wrong signature type (_ssl.c:1108)'))
 # see https://github.com/psf/requests/issues/4775
-from requests import adapters
-import ssl
+from requests import adapters  # TODO update this import
 from urllib3 import poolmanager
-import geocoder
 
 
 class TLSAdapter(adapters.HTTPAdapter):
@@ -33,9 +34,10 @@ class TLSAdapter(adapters.HTTPAdapter):
             ssl_context=ctx)
 
 
-class VIIRSSkill(MycroftSkill):
-    def __init__(self):
-        super(VIIRSSkill, self).__init__(name="VIIRS MyHouseFromSpace Skill")
+class VIIRSSkill(OVOSSkill):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         if "res" not in self.settings:
             self.settings["res"] = "250m"
         if "zoom" not in self.settings:
@@ -62,9 +64,8 @@ class VIIRSSkill(MycroftSkill):
         latest_date = self.session.get(url).text.split(
             "<ows:Identifier>MODIS_Terra_CorrectedReflectance_TrueColor</ows"
             ":Identifier>")[1].split("</Layer>")[0].split(
-            "<ows:Identifier>Time</ows:Identifier>")[1].split("<Value>")[
-            1].split(
-            "</Value>")[0].split("/")[1]
+            "<ows:Identifier>Time</ows:Identifier>")[1].split(
+            "<Value>")[1].split("</Value>")[0].split("/")[1]
 
         # HACK this date is not correct
         # we can not check per location, bugs out around midnight
@@ -143,20 +144,30 @@ class VIIRSSkill(MycroftSkill):
         row = ((90 - lat) * (2 ** level)) // 288
         col = ((180 + lon) * (2 ** level)) // 288
 
-        url = gibs.format(date=date, zoom=int(level),
-                          row=int(row), col=int(col),
-                          res=self.settings["res"], sat=sat)
-        path = join(tempfile.gettempdir(),
-                    "viiirs_{row}_{col}_{zoom}_{res}_{date}.jpg".
-                    format(date=date, zoom=int(level),
-                           row=int(row), col=int(col),
-                           res=self.settings["res"]))
+        url = gibs.format(date=date,
+                          zoom=int(level),
+                          row=int(row),
+                          col=int(col),
+                          res=self.settings["res"],
+                          sat=sat)
+        path = join(
+            tempfile.gettempdir(),
+            "viiirs_{row}_{col}_{zoom}_{res}_{date}.jpg".format(
+                date=date,
+                zoom=int(level),
+                row=int(row),
+                col=int(col),
+                res=self.settings["res"]))
         r = self.session.get(url)
         with open(path, "wb") as f:
             f.write(r.content)
         return path
 
-    def update_picture(self, zoom=None, sat=None, date=None, lat=None,
+    def update_picture(self,
+                       zoom=None,
+                       sat=None,
+                       date=None,
+                       lat=None,
                        lon=None):
         lat = lat or self.location["coordinate"]["latitude"]
         lon = lon or self.location["coordinate"]["longitude"]
@@ -206,11 +217,12 @@ class VIIRSSkill(MycroftSkill):
         self.gui.show_page('idle.qml')
 
     # intents
-    @intent_file_handler("about.intent")
+    @intent_handler("about.intent")
     def handle_about(self, message):
         viirs = join(dirname(__file__), "ui", "images", "viirs.png")
         utterance = self.dialog_renderer.render("aboutVIIRS", {})
-        self.gui.show_image(viirs, override_idle=True,
+        self.gui.show_image(viirs,
+                            override_idle=True,
                             fill='PreserveAspectFit',
                             caption=utterance)
         self.speak(utterance, wait=True)
@@ -245,14 +257,17 @@ class VIIRSSkill(MycroftSkill):
         if silent:
             return
         if location:
-            self.speak_dialog("location",
-                              {"date": date, "location": location}, wait=True)
+            self.speak_dialog("location", {
+                "date": date,
+                "location": location
+            },
+                              wait=True)
         else:
             self.speak_dialog("house", {"date": date}, wait=True)
 
-    @intent_file_handler('viirs.intent')
-    @intent_file_handler('viirs_time.intent')
-    @intent_file_handler('viirs_location.intent')
+    @intent_handler('viirs.intent')
+    @intent_handler('viirs_time.intent')
+    @intent_handler('viirs_location.intent')
     def handle_viirs(self, message):
         date = extract_datetime(message.data["utterance"], lang=self.lang)
         if date:
@@ -260,26 +275,29 @@ class VIIRSSkill(MycroftSkill):
         location = message.data.get("location")
         self._display(date, location)
 
-    @intent_handler(IntentBuilder("WhyCloudsIntent")
-                    .require("why").require("clouds").require("VIIRS"))
+    @intent_handler(
+        IntentBuilder("WhyCloudsIntent").require("why").require(
+            "clouds").require("VIIRS"))
     def handle_clouds(self, message):
         self.speak_dialog("clouds", wait=True)
 
-    @intent_handler(IntentBuilder("WhyHolesIntent")
-                    .require("why").require("gaps")
-                    .require("equator").require("VIIRS"))
+    @intent_handler(
+        IntentBuilder("WhyHolesIntent").require("why").require("gaps").require(
+            "equator").require("VIIRS"))
     def handle_equator(self, message):
         self.speak_dialog("black_strips", wait=True)
 
-    @intent_handler(IntentBuilder("PrevSatPictureIntent")
-                    .require("previous").require("picture").require("VIIRS"))
+    @intent_handler(
+        IntentBuilder("PrevSatPictureIntent").require("previous").require(
+            "picture").require("VIIRS"))
     def handle_prev(self, message):
         date = self.current_date - timedelta(days=1)
         location = self.current_location
         self._display(date, location)
 
-    @intent_handler(IntentBuilder("NextSatPictureIntent")
-                    .require("next").require("picture").require("VIIRS"))
+    @intent_handler(
+        IntentBuilder("NextSatPictureIntent").require("next").require(
+            "picture").require("VIIRS"))
     def handle_next(self, message):
         date = self.current_date + timedelta(days=1)
         location = self.current_location
@@ -294,9 +312,9 @@ class VIIRSSkill(MycroftSkill):
         self._display(self.current_date, self.current_location, silent=True)
         self.speak_dialog("zoom", {"number": self.settings["zoom"]})
 
-    @intent_handler(IntentBuilder("SetZoomIntent")
-                    .require("set_zoom").require("VIIRS")
-                    .optionally("min").optionally("max"))
+    @intent_handler(
+        IntentBuilder("SetZoomIntent").require("set_zoom").require(
+            "VIIRS").optionally("min").optionally("max"))
     def handle_set_zoom(self, message):
         if self.voc_match(message.data["utterance"], "max"):
             n = 8
@@ -315,8 +333,9 @@ class VIIRSSkill(MycroftSkill):
                 return
         self.change_zoom(n)
 
-    @intent_handler(IntentBuilder("DecreaseZoomIntent")
-                    .require("less_zoom").require("VIIRS"))
+    @intent_handler(
+        IntentBuilder("DecreaseZoomIntent").require("less_zoom").require(
+            "VIIRS"))
     def handle_zoom_out(self, message):
 
         n = extract_number(message.data["utterance"], ordinals=True)
@@ -327,8 +346,9 @@ class VIIRSSkill(MycroftSkill):
             return
         self.change_zoom(n)
 
-    @intent_handler(IntentBuilder("IncreaseZoomIntent")
-                    .require("more_zoom").require("VIIRS"))
+    @intent_handler(
+        IntentBuilder("IncreaseZoomIntent").require("more_zoom").require(
+            "VIIRS"))
     def handle_zoom_in(self, message):
         n = extract_number(message.data["utterance"], ordinals=True)
         if n is False:
@@ -337,7 +357,3 @@ class VIIRSSkill(MycroftSkill):
             self.speak_dialog("max.zoom")
             return
         self.change_zoom(n)
-
-
-def create_skill():
-    return VIIRSSkill()
